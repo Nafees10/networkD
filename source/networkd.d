@@ -3,6 +3,19 @@
 import std.socket;
 import utils.misc;
 import utils.baseconv;//needed for converting message size to array of char
+import utils.lists;
+
+/// Used by `Node` to store incoming message's contents and size
+private struct IncomingMessage{
+	char[] buffer; /// The recieved message
+	uint size = 0;/// The size of the message, we use uint instead of uinteger because the size can not be more than 2^32 bytes
+}
+
+/// Used by `Node` to store message that has been recieved, and is still in the stack, yet to be read
+private struct RecievedMessage{
+	char[] message; /// The recieved message, size can be determined by array's length
+	uinteger senderConID; /// Connection ID of the sender
+}
 
 class Node{
 private:
@@ -10,6 +23,62 @@ private:
 	Socket listener;/// To recieve incoming connections
 	Socket[] connections;/// List of all connected Sockets
 	bool isAcceptingConnections = false;/// Determines whether any new incoming connection will be accepted or not
+
+	LinkedList!RecievedMessage recievedMessages;/// recieved messages are stored here, till they're read
+	IncomingMessage[uinteger] incomingMessages;/// messages that are not completely recieved yet, i.e only a part has been recieved, are stored here
+
+	///Called by `Node.recieveLoop` when a new message is recieved, with `buffer` containing the message, and `conID` as the 
+	///connection ID
+	void addRecievedMessage(char[] buffer, uinteger conID){
+		// check if the firt part of the message was already recieved
+		if (conID in incomingMessages){
+			// append this packet's content to previously recieved message(s)
+			incomingMessages[conID].buffer ~= buffer;
+			// check if the total size is known
+			if (incomingMessages[conID].size == 0){
+				// no, size not yet known, calculate it
+				if (incomingMessages[conID].buffer.length >= 4){
+					// size can be calculated, do it now
+					incomingMessages[conID].size = cast(uint)charToDenary(incomingMessages[conID].buffer[0 .. 4]);
+					// the first 4 bytes will be removed when transfer is complete, so no need t odo it now
+				}
+			}
+		}else{
+			// this is the first message in this transfer, so make space in `incomingMessages`
+			IncomingMessage msg;
+			msg.buffer = buffer;
+			// check if size has bee recieved
+			if (msg.buffer.length >= 4){
+				msg.size = cast(uint)charToDenary(msg.buffer[0 .. 4]);
+			}
+			// add it to `incomingMessages`
+			incomingMessages[conID] = msg;
+		}
+		// check if transfer is complete
+		if (incomingMessages[conID].size > 0 && incomingMessages[conID].buffer.length >= incomingMessages[conID].size){
+			// check if extra bytes were sent, consider those bytes as a separate message
+			char[] otherMessage = null;
+			if (incomingMessages[conID].buffer.length > incomingMessages[conID].size){
+				otherMessage = incomingMessages[conID].buffer
+					[incomingMessages[conID].size .. incomingMessages[conID].buffer.length];
+
+				incomingMessages[conID].buffer.length = incomingMessages[conID].size;
+			}
+			// transfer complete, move it to `recievedMessages`
+			RecievedMessage msg;
+			msg.senderConID = conID;
+			msg.message = incomingMessages[conID].buffer[4 .. incomingMessages[conID].size];
+			// adding to `recievedMessages`
+			recievedMessages.append(msg);
+			// remove it from `incomingMessages`
+			incomingMessages.remove(conID);
+			// check if there were extra bytes, if yes, recursively call itself
+			if (otherMessage != null){
+				addRecievedMessage(otherMessage, conID);
+			}
+		}
+	}
+
 public:
 	/// `listenForConnections` if true enables the listener, and any incoming connections are accepted  
 	/// `port` determines the port on which the listener will run
@@ -23,14 +92,20 @@ public:
 			listenerAddr = null;
 			listener = null;
 		}
+		recievedMessages = new LinkedList!RecievedMessage;
 	}
 	/// Closes all connections, including the listener, and destroys the Node
 	~this(){
 		closeAllConnections();
-		listener.shutdown(SocketShutdown.BOTH);
-		listener.close();
-		destroy(listener);
-		destroy(listenerAddr);
+		// stop the listener too
+		if (listener !is null){
+			listener.shutdown(SocketShutdown.BOTH);
+			listener.close();
+			destroy(listener);
+			destroy(listenerAddr);
+		}
+		// remove all stored messages
+		recievedMessages.destroy();
 	}
 	/// Closes all connections
 	void closeAllConnections(){
@@ -90,11 +165,10 @@ public:
 		}
 	}
 	/// Sends a message to a Node using connection ID
-	/// The message on the other end must be recieved using `networkD.Node` because before sending, the message is sent 
-	/// in a format.
+	/// The message on the other end must be recieved using `networkd.Node` because before sending, the message is not sent raw.
 	/// The first 4 bytes (32 bits) contain the size of the message, including these 4 bytes
 	/// This is followed by the content of the message. If the content is too large, it is split up into several packets.
-	/// The max message size is 4 gigabytes (4 * 2^30 bytes)
+	/// The max message size is 4 bytes less than 4 gigabytes (4294967292 bytes)
 	/// 
 	/// Returns true on success and false on failure
 	bool sendMessage(uinteger conID, char[] message){
@@ -128,7 +202,7 @@ public:
 					}else{
 						toSend = message[i .. i + 1024];
 					}
-					/// now actually send it, and return false case error
+					/// now actually send it, and return false case of error
 					if (connections[conID].send(toSend) == Socket.ERROR){
 						r = false;
 						break;
@@ -137,5 +211,12 @@ public:
 			}
 		}
 		return r;
+	}
+
+	/// Run this function in a background thread to recive messages, and, if enabled, accept new connections through listener
+	/// Without this running, no new messages will be added to stack, i.e messages wont be recieved
+	void recieveLoop(){
+		// create a SocketSet
+
 	}
 }
