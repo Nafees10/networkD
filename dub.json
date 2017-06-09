@@ -4,7 +4,7 @@
 		"Nafees"
 	],
 	"dependencies": {
-		"utils": "~>0.1.1"
+		"utils": "~>0.1.2"
 	},
 	"description": "A simple networking library based.socket",
 	"copyright": "Copyright © 2017, Nafees",
