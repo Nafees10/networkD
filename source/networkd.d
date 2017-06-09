@@ -24,6 +24,8 @@ private:
 	Socket[] connections;/// List of all connected Sockets
 	bool isAcceptingConnections = false;/// Determines whether any new incoming connection will be accepted or not
 
+	bool recieveLoopIsRunning;// used to terminate recieveLoop by setting it's val to false
+
 	LinkedList!RecievedMessage recievedMessages;/// recieved messages are stored here, till they're read
 	IncomingMessage[uinteger] incomingMessages;/// messages that are not completely recieved yet, i.e only a part has been recieved, are stored here
 
@@ -88,6 +90,7 @@ public:
 			listener = new Socket(AddressFamily.INET, SocketType.STREAM, ProtocolType.TCP);
 			listener.setOption(SocketOptionLevel.SOCKET, SocketOption.REUSEADDR, true);
 			listener.bind(listenerAddr);
+			listener.listen(15);
 		}else{
 			listenerAddr = null;
 			listener = null;
@@ -217,6 +220,56 @@ public:
 	/// Without this running, no new messages will be added to stack, i.e messages wont be recieved
 	void recieveLoop(){
 		// create a SocketSet
+		SocketSet readSet = new SocketSet();
+
+		TimeVal timeout;
+		timeout.seconds = 5;// after every 5 sec, check if loop needs to terminate
+
+		char[1024] buffer;
+
+		recieveLoopIsRunning = true;
+		while(recieveLoopIsRunning){
+			readSet.reset();
+			// add all connections, listener too, if possible
+			foreach(conn; connections){
+				readSet.add(conn);
+			}
+			//listener
+			if (listener !is null){
+				readSet.add(listener);
+			}
+			// check if a message was recieved
+			if (Socket.select(readSet, null, null, &timeout) > 0){
+				// check if a new connection needs to be accepted
+				if (readSet.isSet(listener)){
+					// add new connection
+					Socket client = listener.accept();
+					client.setOption(SocketOptionLevel.TCP, SocketOption.KEEPALIVE, 1);
+					connections ~= client;
+				}
+				// check if a message was recieved
+				for (uinteger conID = 0; conID < connections.length; conID ++){
+					//did this connection sent it?
+					if (readSet.isSet(connections[conID])){
+						uinteger msgLen = connections[conID].receive(buffer);
+						// check if connection was closed
+						if (msgLen == 0){
+							// connection closed, remove from array, and clear any partially-recieved message from this connection
+							connections[conID].destroy();
+							connections[conID] = null;
+							// remove messages
+							if (conID in incomingMessages){
+								incomingMessages.remove(conID);
+							}
+						}else{
+							// a message was recieved
+							addRecievedMessage(buffer[0 .. msgLen], conID);
+						}
+					}
+				}
+			}
+		}
+
 
 	}
 }
