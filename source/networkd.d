@@ -113,9 +113,11 @@ public:
 	/// Closes all connections
 	void closeAllConnections(){
 		foreach(connection; connections){
-			connection.shutdown(SocketShutdown.BOTH);
-			connection.close();
-			destroy(connection);
+			if (connection !is null){
+				connection.shutdown(SocketShutdown.BOTH);
+				connection.close();
+				destroy(connection);
+			}
 		}
 		connections.length = 0;
 	}
@@ -152,7 +154,7 @@ public:
 	/// Closes a connection using it's connection ID
 	/// Returns true on success, false on failure
 	bool closeConnection(uinteger conID){
-		if (conID < connections.length && connections[conID] !is null){
+		if (connectionExists(conID)){
 			connections[conID].shutdown(SocketShutdown.BOTH);
 			connections[conID].close;
 			destroy(connections[conID]);
@@ -167,6 +169,15 @@ public:
 			return false;
 		}
 	}
+
+	///Returns true if a connection ID is assigned to an existing connection
+	bool connectionExists(uinteger conID){
+		bool r = false;
+		if (conID < connections.length && connections[conID] !is null){
+			r = true;
+		}
+		return r;
+	}
 	/// Sends a message to a Node using connection ID
 	/// The message on the other end must be recieved using `networkd.Node` because before sending, the message is not sent raw.
 	/// The first 4 bytes (32 bits) contain the size of the message, including these 4 bytes
@@ -177,7 +188,7 @@ public:
 	bool sendMessage(uinteger conID, char[] message){
 		bool r = false;
 		//check if connection ID is valid
-		if (conID < connections.length && connections[conID] !is null){
+		if (connectionExists(conID)){
 			char[] msgSize;
 			uinteger size = message.length + 4;//+4 for the size-chars
 			msgSize = denaryToChar(size);
@@ -232,7 +243,9 @@ public:
 			readSet.reset();
 			// add all connections, listener too, if possible
 			foreach(conn; connections){
-				readSet.add(conn);
+				if (conn !is null){
+					readSet.add(conn);
+				}
 			}
 			//listener
 			if (listener !is null){
@@ -270,6 +283,92 @@ public:
 			}
 		}
 
+	}
+	/// Terminates the message-recieving-loop. This function will return immediately but the loop can take up to 5 seconds to 
+	/// actually terminate
+	/// 
+	/// Returns true if the loop was running and was was marked to terminate
+	/// faslse if the loop wasn't running
+	bool terminateRecieveLoop(){
+		if (recieveLoopIsRunning){
+			recieveLoopIsRunning = false;
+			return true;
+		}else{
+			return false;
+		}
+	}
 
+	/// Returns a message recieved from a connection using connection ID.
+	/// Returns null or zero length in case there are no messages
+	char[] getMessage(uinteger conID){
+		//go through the linked list to check if there's any message from conID
+		recievedMessages.resetRead();
+		RecievedMessage* msg = recievedMessages.read();
+		char[] r = null;
+		while (msg !is null){
+			if ((*msg).senderConID == conID){
+				//return and delete this message, from list
+				r = (*msg).message;
+				//delete from list
+				if (recievedMessages.removeLastRead() == false){
+					throw new Exception("Failed to remove message from `recievedMessages` LinkedList");
+				}
+			}
+		}
+		return r;
+	}
+
+	/// Clears all stored recieved messages from all connections
+	void clearRecievedMessages(){
+		recievedMessages.clear();
+	}
+	/// Clears all stored recieved messages from a connection using the connection ID
+	void clearRecievedMessages(uinteger conID){
+		// will have to go through list
+		recievedMessages.resetRead();
+		RecievedMessage* msg = recievedMessages.read();
+
+		while (msg !is null){
+			if ((*msg).senderConID == conID){
+				if (recievedMessages.removeLastRead() == false){
+					throw new Exception("Failed to remove message from `recievedMessages` LinkedList");
+				}
+			}
+		}
+	}
+
+	///Returns IP Address of a connection using connection ID
+	///`local` if true, makes it return the local address, otherwise, remoteAddress is used
+	///If connection doesn't exist, null is retured
+	string getIPAddr(uinteger conID, bool local){
+		//check if connection exists
+		if (connectionExists(conID)){
+			Address addr;
+			if (local){
+				addr = connections[conID].localAddress;
+			}else{
+				addr = connections[conID].remoteAddress;
+			}
+			return addr.toAddrString;
+		}else{
+			return null;
+		}
+	}
+	/// Returns Host name of a connection using connection ID
+	/// `local` if true, makes it return local host name, else, remote host name is used
+	///If connection doesn't exist, null is retured
+	string getHostName(uinteger conID, bool local){
+		// check if valid connection
+		if (connectionExists(conID)){
+			Address addr;
+			if (local){
+				addr = connections[conID].localAddress;
+			}else{
+				addr = connections[conID].remoteAddress;
+			}
+			return addr.toHostNameString;
+		}else{
+			return null;
+		}
 	}
 }
