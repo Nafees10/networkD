@@ -17,6 +17,11 @@ private struct RecievedMessage{
 	uinteger senderConID; /// Connection ID of the sender
 }
 
+/// Stores message status, i.e: total size, and recieved size
+public struct IncomingMessageStatus{
+	uinteger size, recieved;
+}
+
 class Node{
 private:
 	InternetAddress listenerAddr;
@@ -316,6 +321,24 @@ public:
 			}
 		}
 		return r;
+	}
+
+	/// Returns `IncomingMessageStatus` from a message from a connection using connection ID
+	/// If there is no message being recieved, or connection ID is invalid, the size returned will be zero
+	/// 
+	/// A note: The total message size will be 4 bytes more than that of the message that will be actually returned by `getMessage`
+	/// This is because with every message, 4 extra bytes are sent that contain the message size
+	IncomingMessageStatus getIncomingMessageStatus(uinteger conID){
+		IncomingMessageStatus status;
+		//check if id is valid and a message is being recieved
+		if (connectionExists(conID) && conID in incomingMessages){
+			status.size = incomingMessages[conID].size;
+			status.recieved = incomingMessages[conID].buffer.length;
+
+		}else{
+			status.size = 0;
+		}
+		return status;
 	}
 
 	/// Clears all stored recieved messages from all connections
