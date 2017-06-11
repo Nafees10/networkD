@@ -146,7 +146,7 @@ public:
 			}
 		}
 		// check if has to expand array
-		if (connections[i] is null){
+		if (connections.length > 0 && connections[i] is null){
 			// there's space already, no need to expand
 			connections[i] = connection;
 		}else{
@@ -201,10 +201,11 @@ public:
 			if (msgSize.length < 4){
 				// fill the empty bytes with 0x00 to make it 4 bytes long
 				uinteger oldLength = msgSize.length;
-				msgSize.length = 4;
-				msgSize[4 - oldLength .. 4] = msgSize[0 .. oldLength];
-				//fill 0x00 in empty space
-				msgSize[0 .. (4 - oldLength) - 1] = cast(char)0;
+				char[] nSize;
+				nSize.length = 4;
+				nSize[] = 0;
+				nSize[4 - oldLength .. 4][] = msgSize;
+				msgSize = nSize;
 			}
 			/// only continue if size can fit in 4 bytes
 			if (msgSize.length == 4){
@@ -318,6 +319,7 @@ public:
 				if (recievedMessages.removeLastRead() == false){
 					throw new Exception("Failed to remove message from `recievedMessages` LinkedList");
 				}
+				break;
 			}
 		}
 		return r;
