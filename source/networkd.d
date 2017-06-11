@@ -7,39 +7,39 @@ import utils.lists;
 
 /// Used by `Node` to store incoming message's contents and size
 private struct IncomingMessage{
-	char[] buffer; /// The recieved message
+	char[] buffer; /// The received message
 	uint size = 0;/// The size of the message, we use uint instead of uinteger because the size can not be more than 2^32 bytes
 }
 
-/// Used by `Node` to store message that has been recieved, and is still in the stack, yet to be read
-private struct RecievedMessage{
-	char[] message; /// The recieved message, size can be determined by array's length
+/// Used by `Node` to store message that has been received, and is still in the stack, yet to be read
+private struct ReceivedMessage{
+	char[] message; /// The received message, size can be determined by array's length
 	uinteger senderConID; /// Connection ID of the sender
 }
 
-/// Stores message status, i.e: total size, and recieved size
+/// Stores message status, i.e: total size, and received size
 public struct IncomingMessageStatus{
-	uinteger size, recieved;
+	uinteger size, received;
 }
 
 class Node{
 private:
 	InternetAddress listenerAddr;
-	Socket listener;/// To recieve incoming connections
+	Socket listener;/// To receive incoming connections
 	Socket[] connections;/// List of all connected Sockets
 	bool isAcceptingConnections = false;/// Determines whether any new incoming connection will be accepted or not
 
-	bool recieveLoopIsRunning;// used to terminate recieveLoop by setting it's val to false
+	bool receiveLoopIsRunning;// used to terminate receiveLoop by setting it's val to false
 
-	LinkedList!RecievedMessage recievedMessages;/// recieved messages are stored here, till they're read
-	IncomingMessage[uinteger] incomingMessages;/// messages that are not completely recieved yet, i.e only a part has been recieved, are stored here
+	LinkedList!ReceivedMessage receivedMessages;/// received messages are stored here, till they're read
+	IncomingMessage[uinteger] incomingMessages;/// messages that are not completely received yet, i.e only a part has been received, are stored here
 
-	///Called by `Node.recieveLoop` when a new message is recieved, with `buffer` containing the message, and `conID` as the 
+	///Called by `Node.receiveLoop` when a new message is received, with `buffer` containing the message, and `conID` as the 
 	///connection ID
-	void addRecievedMessage(char[] buffer, uinteger conID){
-		// check if the firt part of the message was already recieved
+	void addreceivedMessage(char[] buffer, uinteger conID){
+		// check if the firt part of the message was already received
 		if (conID in incomingMessages){
-			// append this packet's content to previously recieved message(s)
+			// append this packet's content to previously received message(s)
 			incomingMessages[conID].buffer ~= buffer;
 			// check if the total size is known
 			if (incomingMessages[conID].size == 0){
@@ -54,7 +54,7 @@ private:
 			// this is the first message in this transfer, so make space in `incomingMessages`
 			IncomingMessage msg;
 			msg.buffer = buffer;
-			// check if size has bee recieved
+			// check if size has bee received
 			if (msg.buffer.length >= 4){
 				msg.size = cast(uint)charToDenary(msg.buffer[0 .. 4]);
 			}
@@ -71,17 +71,17 @@ private:
 
 				incomingMessages[conID].buffer.length = incomingMessages[conID].size;
 			}
-			// transfer complete, move it to `recievedMessages`
-			RecievedMessage msg;
+			// transfer complete, move it to `receivedMessages`
+			ReceivedMessage msg;
 			msg.senderConID = conID;
 			msg.message = incomingMessages[conID].buffer[4 .. incomingMessages[conID].size];
-			// adding to `recievedMessages`
-			recievedMessages.append(msg);
+			// adding to `receivedMessages`
+			receivedMessages.append(msg);
 			// remove it from `incomingMessages`
 			incomingMessages.remove(conID);
 			// check if there were extra bytes, if yes, recursively call itself
 			if (otherMessage != null){
-				addRecievedMessage(otherMessage, conID);
+				addreceivedMessage(otherMessage, conID);
 			}
 		}
 	}
@@ -100,7 +100,7 @@ public:
 			listenerAddr = null;
 			listener = null;
 		}
-		recievedMessages = new LinkedList!RecievedMessage;
+		receivedMessages = new LinkedList!ReceivedMessage;
 	}
 	/// Closes all connections, including the listener, and destroys the Node
 	~this(){
@@ -113,7 +113,7 @@ public:
 			destroy(listenerAddr);
 		}
 		// remove all stored messages
-		recievedMessages.destroy();
+		receivedMessages.destroy();
 	}
 	/// Closes all connections
 	void closeAllConnections(){
@@ -184,7 +184,7 @@ public:
 		return r;
 	}
 	/// Sends a message to a Node using connection ID
-	/// The message on the other end must be recieved using `networkd.Node` because before sending, the message is not sent raw.
+	/// The message on the other end must be received using `networkd.Node` because before sending, the message is not sent raw.
 	/// The first 4 bytes (32 bits) contain the size of the message, including these 4 bytes
 	/// This is followed by the content of the message. If the content is too large, it is split up into several packets.
 	/// The max message size is 4 bytes less than 4 gigabytes (4294967292 bytes)
@@ -234,8 +234,8 @@ public:
 	}
 
 	/// Run this function in a background thread to recive messages, and, if enabled, accept new connections through listener
-	/// Without this running, no new messages will be added to stack, i.e messages wont be recieved
-	void recieveLoop(){
+	/// Without this running, no new messages will be added to stack, i.e messages wont be received
+	void receiveLoop(){
 		// create a SocketSet
 		SocketSet readSet = new SocketSet();
 
@@ -244,8 +244,8 @@ public:
 
 		char[1024] buffer;
 
-		recieveLoopIsRunning = true;
-		while(recieveLoopIsRunning){
+		receiveLoopIsRunning = true;
+		while(receiveLoopIsRunning){
 			readSet.reset();
 			// add all connections, listener too, if possible
 			foreach(conn; connections){
@@ -257,7 +257,7 @@ public:
 			if (listener !is null){
 				readSet.add(listener);
 			}
-			// check if a message was recieved
+			// check if a message was received
 			if (Socket.select(readSet, null, null, &timeout) > 0){
 				// check if a new connection needs to be accepted
 				if (readSet.isSet(listener)){
@@ -266,14 +266,14 @@ public:
 					client.setOption(SocketOptionLevel.TCP, SocketOption.KEEPALIVE, 1);
 					connections ~= client;
 				}
-				// check if a message was recieved
+				// check if a message was received
 				for (uinteger conID = 0; conID < connections.length; conID ++){
 					//did this connection sent it?
 					if (readSet.isSet(connections[conID])){
 						uinteger msgLen = connections[conID].receive(buffer);
 						// check if connection was closed
 						if (msgLen == 0){
-							// connection closed, remove from array, and clear any partially-recieved message from this connection
+							// connection closed, remove from array, and clear any partially-received message from this connection
 							connections[conID].destroy();
 							connections[conID] = null;
 							// remove messages
@@ -281,8 +281,8 @@ public:
 								incomingMessages.remove(conID);
 							}
 						}else{
-							// a message was recieved
-							addRecievedMessage(buffer[0 .. msgLen], conID);
+							// a message was received
+							addreceivedMessage(buffer[0 .. msgLen], conID);
 						}
 					}
 				}
@@ -295,29 +295,29 @@ public:
 	/// 
 	/// Returns true if the loop was running and was was marked to terminate
 	/// faslse if the loop wasn't running
-	bool terminateRecieveLoop(){
-		if (recieveLoopIsRunning){
-			recieveLoopIsRunning = false;
+	bool terminateReceiveLoop(){
+		if (receiveLoopIsRunning){
+			receiveLoopIsRunning = false;
 			return true;
 		}else{
 			return false;
 		}
 	}
 
-	/// Returns a message recieved from a connection using connection ID.
+	/// Returns a message received from a connection using connection ID.
 	/// Returns null or zero length in case there are no messages
 	char[] getMessage(uinteger conID){
 		//go through the linked list to check if there's any message from conID
-		recievedMessages.resetRead();
-		RecievedMessage* msg = recievedMessages.read();
+		receivedMessages.resetRead();
+		ReceivedMessage* msg = receivedMessages.read();
 		char[] r = null;
 		while (msg !is null){
 			if ((*msg).senderConID == conID){
 				//return and delete this message, from list
 				r = (*msg).message;
 				//delete from list
-				if (recievedMessages.removeLastRead() == false){
-					throw new Exception("Failed to remove message from `recievedMessages` LinkedList");
+				if (receivedMessages.removeLastRead() == false){
+					throw new Exception("Failed to remove message from `receivedMessages` LinkedList");
 				}
 				break;
 			}
@@ -326,16 +326,16 @@ public:
 	}
 
 	/// Returns `IncomingMessageStatus` from a message from a connection using connection ID
-	/// If there is no message being recieved, or connection ID is invalid, the size returned will be zero
+	/// If there is no message being received, or connection ID is invalid, the size returned will be zero
 	/// 
 	/// A note: The total message size will be 4 bytes more than that of the message that will be actually returned by `getMessage`
 	/// This is because with every message, 4 extra bytes are sent that contain the message size
 	IncomingMessageStatus getIncomingMessageStatus(uinteger conID){
 		IncomingMessageStatus status;
-		//check if id is valid and a message is being recieved
+		//check if id is valid and a message is being received
 		if (connectionExists(conID) && conID in incomingMessages){
 			status.size = incomingMessages[conID].size;
-			status.recieved = incomingMessages[conID].buffer.length;
+			status.received = incomingMessages[conID].buffer.length;
 
 		}else{
 			status.size = 0;
@@ -343,20 +343,20 @@ public:
 		return status;
 	}
 
-	/// Clears all stored recieved messages from all connections
-	void clearRecievedMessages(){
-		recievedMessages.clear();
+	/// Clears all stored received messages from all connections
+	void clearReceivedMessages(){
+		receivedMessages.clear();
 	}
-	/// Clears all stored recieved messages from a connection using the connection ID
-	void clearRecievedMessages(uinteger conID){
+	/// Clears all stored received messages from a connection using the connection ID
+	void clearReceivedMessages(uinteger conID){
 		// will have to go through list
-		recievedMessages.resetRead();
-		RecievedMessage* msg = recievedMessages.read();
+		receivedMessages.resetRead();
+		ReceivedMessage* msg = receivedMessages.read();
 
 		while (msg !is null){
 			if ((*msg).senderConID == conID){
-				if (recievedMessages.removeLastRead() == false){
-					throw new Exception("Failed to remove message from `recievedMessages` LinkedList");
+				if (receivedMessages.removeLastRead() == false){
+					throw new Exception("Failed to remove message from `receivedMessages` LinkedList");
 				}
 			}
 		}
@@ -395,5 +395,19 @@ public:
 		}else{
 			return null;
 		}
+	}
+	/// Returns a list of all connection IDs that are currently assigned to connections, useful for running server
+	/// 
+	/// More information on connection can be retrieved using 
+	uinteger[] getConnections(){
+		LinkedList!uinteger list = new LinkedList!uinteger;
+		for (uinteger i = 0; i < connections.length; i ++){
+			if (connections[i] !is null){
+				list.append(i);
+			}
+		}
+		uinteger[] r = list.toArray;
+		list.destroy;
+		return r;
 	}
 }
