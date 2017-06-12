@@ -65,7 +65,7 @@ struct Event{
 	@property getEventData(Type T)(){
 		// make sure that the type is correct
 		//since it's a template, and Type T will be known at compile time, we'll use static
-		static if (T != type){
+		if (T != type){
 			throw new Exception("Provided Event Type differs from actual Event Type");
 		}
 		// now a static if for every type...
@@ -109,6 +109,8 @@ private:
 	bool receiveLoopIsRunning;// used to terminate receiveLoop by setting it's val to false
 	
 	IncomingMessage[uinteger] incomingMessages;/// messages that are not completely received yet, i.e only a part has been received, are stored here
+
+	SocketSet receiveSockets;
 
 	///Called by `Node.receiveLoop` when a new message is received, with `buffer` containing the message, and `conID` as the 
 	///connection ID
@@ -208,6 +210,7 @@ public:
 			listenerAddr = null;
 			listener = null;
 		}
+		receiveSockets = new SocketSet;
 	}
 	/// Closes all connections, including the listener, and destroys the Node
 	~this(){
@@ -219,6 +222,7 @@ public:
 			destroy(listener);
 			destroy(listenerAddr);
 		}
+		receiveSockets.destroy;
 	}
 	/// Closes all connections
 	void closeAllConnections(){
@@ -322,24 +326,24 @@ public:
 		return r;
 	}
 	///Waits for an event to occur, and returns it. A timeout can be provided
-	Event getEvent(TimeVal timeout){
+	Event getEvent(TimeVal* timeout){
 		char[1024] buffer;
 		Event result;
-		SocketSet readSet;
+		receiveSockets.reset;
 		//add all active connections
 		foreach(conn; connections){
 			if (conn !is null){
-				readSet.add(conn);
+				receiveSockets.add(conn);
 			}
 		}
 		//add the listener if not null
 		if (listener !is null){
-			readSet.add(listener);
+			receiveSockets.add(listener);
 		}
 		// check if a message was received
-		if (Socket.select(readSet, null, null, &timeout) > 0){
+		if (Socket.select(receiveSockets, null, null, timeout) > 0){
 			// check if a new connection needs to be accepted
-			if (readSet.isSet(listener)){
+			if (receiveSockets.isSet(listener)){
 				// add new connection
 				Socket client = listener.accept();
 				client.setOption(SocketOptionLevel.TCP, SocketOption.KEEPALIVE, 1);
@@ -350,7 +354,7 @@ public:
 			// check if a message was received
 			for (uinteger conID = 0; conID < connections.length; conID ++){
 				//did this connection sent it?
-				if (readSet.isSet(connections[conID])){
+				if (receiveSockets.isSet(connections[conID])){
 					uinteger msgLen = connections[conID].receive(buffer);
 					// check if connection was closed
 					if (msgLen == 0){
