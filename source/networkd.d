@@ -8,7 +8,7 @@ import utils.lists;
 /// Used by `Node` to store incoming message's contents and size
 private struct IncomingMessage{
 	char[] buffer; /// The received message
-	uint size = 0;/// The size of the message, we use uint instead of uinteger because the size can not be more than 2^32 bytes
+	uint size = 0; /// The size of the message, we use uint instead of uinteger because the size can not be more than 2^32 bytes
 }
 
 /// Used by `Node` to store message that has been received, and is still in the stack, yet to be read
@@ -17,9 +17,85 @@ private struct ReceivedMessage{
 	uinteger senderConID; /// Connection ID of the sender
 }
 
-/// Stores message status, i.e: total size, and received size
-public struct IncomingMessageStatus{
-	uinteger size, received;
+/// MessageEvent, returned by `Event.get!(Event.Type.MessageReceived)`
+struct MessageEvent{
+	char[] message; /// The message that was received
+}
+/// PartMessageEvent, returned by `Event.get!(Event.Type.PartMessageReceived)`
+struct PartMessageEvent{
+	char[] message; /// The message that has been received
+	uint size; /// The length of message when transfer will be complete
+}
+
+
+///Event: this type can contain other event types, such as message-received etc.
+///It's returned by `Node.getEvent`
+struct Event{
+	/// Enum defining all possible event types
+	enum Type{
+		MessageEvent, /// When a message has been completely transfered (received)
+		PartMessageEvent, /// When a part of a message is received. This can be used to estimate the time-left...
+		ConnectionAccepted, /// When the listener accepts an incoming connection. The connection ID of this connection can be retrieved by `Event.conID`
+		ConnectionClosed, /// When a connection is closed
+	}
+	/// Stores Type for this Event
+	private Type type;
+	/// Stores Connection ID of the sender
+	private uinteger senderConID;
+	/// an Event can be only of a single type, so we use union to store that Type
+	private union{
+		MessageEvent messageEvent;
+		PartMessageEvent partMessageEvent;
+	}
+
+	/// Returns the Type for this event
+	@property Type eventType(){
+		return type;
+	}
+	/// Returns the connection ID associated with the event
+	@property uinteger conID(){
+		return senderConID;
+	}
+	/// Returns the event using the Event.Type  
+	/// Call it like:
+	/// ```
+	/// Event.getEvent!(Event.Type.SOMETYPE);
+	/// ```
+	@property getEvent(Type T)(){
+		// make sure that the type is correct
+		//since it's a template, and Type T will be known at compile time, we'll use static
+		static if (T != type){
+			throw new Exception("Provided Event Type differs from actual Event Type");
+		}
+		// now a static if for every type...
+		static if (T == Type.MessageReceived){
+			return messageReceived;
+		}else static if (T == Type.ConnectionAccepted){
+			return connectionAccepted;
+		}else static if (T == Type.ConnectionClosed){
+			return connectionClosed;
+		}else static if (T == Type.PartMessageReceived){
+			return partMessageReceived;
+		}
+	}
+	//constructors, different for each Event Type
+	// we'll mark them private as all Events are constructed in this module
+	private{
+		this(uinteger conID, MessageEvent event){
+			messageEvent = event;
+			type = Type.MessageEvent;
+			senderConID = conID;
+		}
+		this(uinteger conID, PartMessageEvent event){
+			partMessageEvent = event;
+			type = Type.PartMessageEvent;
+			senderConID = conID;
+		}
+		this(uinteger conID, Type t){
+			type = t;
+			senderConID = conID;
+		}
+	}
 }
 
 class Node{
@@ -290,77 +366,8 @@ public:
 		}
 
 	}
-	/// Terminates the message-recieving-loop. This function will return immediately but the loop can take up to 5 seconds to 
-	/// actually terminate
-	/// 
-	/// Returns true if the loop was running and was was marked to terminate
-	/// faslse if the loop wasn't running
-	bool terminateReceiveLoop(){
-		if (receiveLoopIsRunning){
-			receiveLoopIsRunning = false;
-			return true;
-		}else{
-			return false;
-		}
-	}
-
-	/// Returns a message received from a connection using connection ID.
-	/// Returns null or zero length in case there are no messages
-	char[] getMessage(uinteger conID){
-		//go through the linked list to check if there's any message from conID
-		receivedMessages.resetRead();
-		ReceivedMessage* msg = receivedMessages.read();
-		char[] r = null;
-		while (msg !is null){
-			if ((*msg).senderConID == conID){
-				//return and delete this message, from list
-				r = (*msg).message;
-				//delete from list
-				if (receivedMessages.removeLastRead() == false){
-					throw new Exception("Failed to remove message from `receivedMessages` LinkedList");
-				}
-				break;
-			}
-		}
-		return r;
-	}
-
-	/// Returns `IncomingMessageStatus` from a message from a connection using connection ID
-	/// If there is no message being received, or connection ID is invalid, the size returned will be zero
-	/// 
-	/// A note: The total message size will be 4 bytes more than that of the message that will be actually returned by `getMessage`
-	/// This is because with every message, 4 extra bytes are sent that contain the message size
-	IncomingMessageStatus getIncomingMessageStatus(uinteger conID){
-		IncomingMessageStatus status;
-		//check if id is valid and a message is being received
-		if (connectionExists(conID) && conID in incomingMessages){
-			status.size = incomingMessages[conID].size;
-			status.received = incomingMessages[conID].buffer.length;
-
-		}else{
-			status.size = 0;
-		}
-		return status;
-	}
-
-	/// Clears all stored received messages from all connections
-	void clearReceivedMessages(){
-		receivedMessages.clear();
-	}
-	/// Clears all stored received messages from a connection using the connection ID
-	void clearReceivedMessages(uinteger conID){
-		// will have to go through list
-		receivedMessages.resetRead();
-		ReceivedMessage* msg = receivedMessages.read();
-
-		while (msg !is null){
-			if ((*msg).senderConID == conID){
-				if (receivedMessages.removeLastRead() == false){
-					throw new Exception("Failed to remove message from `receivedMessages` LinkedList");
-				}
-			}
-		}
-	}
+	///Waits for an event to occur, and returns it. A timeout can be provided
+	/// TODO
 
 	///Returns IP Address of a connection using connection ID
 	///`local` if true, makes it return the local address, otherwise, remoteAddress is used
