@@ -83,7 +83,7 @@ struct Event{
 	// we'll mark them private as all Events are constructed in this module
 	private{
 		this(uinteger conID, char[] eventData){
-			messageEvent = eventData;
+			messageEvent = eventData.dup;
 			type = Type.MessageEvent;
 			senderConID = conID;
 		}
@@ -112,9 +112,9 @@ private:
 
 	SocketSet receiveSockets;
 
-	///Called by `Node.receiveLoop` when a new message is received, with `buffer` containing the message, and `conID` as the 
+	///Called by `Node.getEvent` when a new message is received, with `buffer` containing the message, and `conID` as the 
 	///connection ID
-	Event addreceivedMessage(char[] buffer, uinteger conID){
+	Event addReceivedMessage(char[] buffer, uinteger conID){
 		// check if the firt part of the message was already received
 		if (conID in incomingMessages){
 			// append this packet's content to previously received message(s)
@@ -124,7 +124,7 @@ private:
 				// no, size not yet known, calculate it
 				if (incomingMessages[conID].buffer.length >= 4){
 					// size can be calculated, do it now
-					incomingMessages[conID].size = cast(uint)charToDenary(incomingMessages[conID].buffer[0 .. 4]);
+					incomingMessages[conID].size = cast(uint)charToDenary(incomingMessages[conID].buffer[0 .. 4].dup);
 					// the first 4 bytes will be removed when transfer is complete, so no need t odo it now
 				}
 			}
@@ -134,7 +134,7 @@ private:
 			msg.buffer = buffer;
 			// check if size has bee received
 			if (msg.buffer.length >= 4){
-				msg.size = cast(uint)charToDenary(msg.buffer[0 .. 4]);
+				msg.size = cast(uint)charToDenary(msg.buffer[0 .. 4].dup);
 			}
 			// add it to `incomingMessages`
 			incomingMessages[conID] = msg;
@@ -146,7 +146,7 @@ private:
 			char[] otherMessage = null;
 			if (incomingMessages[conID].buffer.length > incomingMessages[conID].size){
 				otherMessage = incomingMessages[conID].buffer
-					[incomingMessages[conID].size .. incomingMessages[conID].buffer.length];
+					[incomingMessages[conID].size .. incomingMessages[conID].buffer.length].dup;
 
 				incomingMessages[conID].buffer.length = incomingMessages[conID].size;
 			}
@@ -157,7 +157,7 @@ private:
 
 			// check if there were extra bytes, if yes, recursively call itself
 			if (otherMessage != null){
-				addreceivedMessage(otherMessage, conID);
+				addReceivedMessage(otherMessage, conID);
 			}
 		}else{
 			//add event for part message
@@ -297,7 +297,7 @@ public:
 				char[] nSize;
 				nSize.length = 4;
 				nSize[] = 0;
-				nSize[4 - oldLength .. 4][] = msgSize;
+				nSize[4 - oldLength .. 4] = msgSize.dup;
 				msgSize = nSize;
 			}
 			/// only continue if size can fit in 4 bytes
@@ -311,9 +311,9 @@ public:
 					char[] toSend;
 					if (message.length < i+1024){
 						//then just send the remaining message
-						toSend = message[i .. message.length];
+						toSend = message[i .. message.length].dup;
 					}else{
-						toSend = message[i .. i + 1024];
+						toSend = message[i .. i + 1024].dup;
 					}
 					/// now actually send it, and return false case of error
 					if (connections[conID].send(toSend) == Socket.ERROR){
@@ -369,7 +369,7 @@ public:
 						result = Event(conID, Event.Type.ConnectionClosed);
 					}else{
 						// a message was received
-						result = addreceivedMessage(buffer[0 .. msgLen], conID);
+						result = addReceivedMessage(buffer[0 .. msgLen], conID);
 					}
 				}
 			}
