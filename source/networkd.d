@@ -28,7 +28,9 @@ struct Event{
 		ConnectionAccepted, /// When the listener accepts an incoming connection. The connection ID of this connection can be retrieved by `Event.conID`
 		ConnectionClosed, /// When a connection is closed
 	}
-	/// PartMessageEvent, returned by `Event.get!(Event.Type.PartMessageEvent)`
+	/// PartMessageEvent, returned by `Event.getEventData!(Event.Type.PartMessageEvent)`
+	/// 
+	/// The values provided can be (will be) incorrect if less than 4 bytes have been received
 	struct PartMessageEvent{
 		uint received; /// The number of bytes that have been received
 		uint size; /// The length of message when transfer will be complete
@@ -72,9 +74,9 @@ struct Event{
 		}else static if (T == Type.PartMessageEvent){
 			return partMessageEvent;
 		}else static if (T == Type.ConnectionAccepted){
-			throw new Exception("No further data can be retrieved from Event.Type.ConnectionAccepted using Event.getEvent");
+			throw new Exception("No further data can be retrieved from Event.Type.ConnectionAccepted using Event.getEventData");
 		}else static if (T == Type.ConnectionClosed){
-			throw new Exception("No further data can be retrieved from Event.Type.ConnectionClosed using Event.getEvent");
+			throw new Exception("No further data can be retrieved from Event.Type.ConnectionClosed using Event.getEventData");
 		}
 	}
 	//constructors, different for each Event Type
@@ -105,13 +107,12 @@ private:
 	bool isAcceptingConnections = false;/// Determines whether any new incoming connection will be accepted or not
 
 	bool receiveLoopIsRunning;// used to terminate receiveLoop by setting it's val to false
-
-	LinkedList!ReceivedMessage receivedMessages;/// received messages are stored here, till they're read
+	
 	IncomingMessage[uinteger] incomingMessages;/// messages that are not completely received yet, i.e only a part has been received, are stored here
 
 	///Called by `Node.receiveLoop` when a new message is received, with `buffer` containing the message, and `conID` as the 
 	///connection ID
-	void addreceivedMessage(char[] buffer, uinteger conID){
+	Event addreceivedMessage(char[] buffer, uinteger conID){
 		// check if the firt part of the message was already received
 		if (conID in incomingMessages){
 			// append this packet's content to previously received message(s)
@@ -136,7 +137,8 @@ private:
 			// add it to `incomingMessages`
 			incomingMessages[conID] = msg;
 		}
-		// check if transfer is complete
+		Event result;
+		// check if transfer is complete, case yes, add an event for it as complete message, else; as part message
 		if (incomingMessages[conID].size > 0 && incomingMessages[conID].buffer.length >= incomingMessages[conID].size){
 			// check if extra bytes were sent, consider those bytes as a separate message
 			char[] otherMessage = null;
@@ -147,19 +149,50 @@ private:
 				incomingMessages[conID].buffer.length = incomingMessages[conID].size;
 			}
 			// transfer complete, move it to `receivedMessages`
-			ReceivedMessage msg;
-			msg.senderConID = conID;
-			msg.message = incomingMessages[conID].buffer[4 .. incomingMessages[conID].size];
-			// adding to `receivedMessages`
-			receivedMessages.append(msg);
+			result = Event(conID, incomingMessages[conID].buffer[4 .. incomingMessages[conID].size]);
 			// remove it from `incomingMessages`
 			incomingMessages.remove(conID);
+
 			// check if there were extra bytes, if yes, recursively call itself
 			if (otherMessage != null){
 				addreceivedMessage(otherMessage, conID);
 			}
+		}else{
+			//add event for part message
+			Event.PartMessageEvent partMessage;
+			if (incomingMessages[conID].buffer.length > 4){
+				partMessage.received = cast(uint)incomingMessages[conID].buffer.length - 4;
+			}else{
+				partMessage.received = 0;
+			}
+			partMessage.size = incomingMessages[conID].size - 4;
+			result = Event(conID, partMessage);
 		}
+		return result;
 	}
+
+	/// Adds socket to `connections` array, returns connection ID
+	uinteger addSocket(Socket connection){
+		// add it to list
+		//go through the list to find a free id, if none, expand the array
+		uinteger i;
+		for (i = 0; i < connections.length; i++){
+			if (connections[i] is null){
+				break;
+			}
+		}
+		// check if has to expand array
+		if (connections.length > 0 && connections[i] is null){
+			// there's space already, no need to expand
+			connections[i] = connection;
+		}else{
+			// in case of no space, append it to end of array
+			i = connections.length;
+			connections ~= connection;
+		}
+		return i;
+	}
+
 
 public:
 	/// `listenForConnections` if true enables the listener, and any incoming connections are accepted  
@@ -175,7 +208,6 @@ public:
 			listenerAddr = null;
 			listener = null;
 		}
-		receivedMessages = new LinkedList!ReceivedMessage;
 	}
 	/// Closes all connections, including the listener, and destroys the Node
 	~this(){
@@ -187,8 +219,6 @@ public:
 			destroy(listener);
 			destroy(listenerAddr);
 		}
-		// remove all stored messages
-		receivedMessages.destroy();
 	}
 	/// Closes all connections
 	void closeAllConnections(){
@@ -212,24 +242,8 @@ public:
 		}catch (Exception e){
 			throw e;
 		}
-		// add it to list
-		//go through the list to find a free id, if none, expand the array
-		uinteger i;
-		for (i = 0; i < connections.length; i++){
-			if (connections[i] is null){
-				break;
-			}
-		}
-		// check if has to expand array
-		if (connections.length > 0 && connections[i] is null){
-			// there's space already, no need to expand
-			connections[i] = connection;
-		}else{
-			// in case of no space, append it to end of array
-			i = connections.length;
-			connections ~= connection;
-		}
-		return i;
+
+		return addSocket(connection);
 	}
 	/// Closes a connection using it's connection ID
 	/// Returns true on success, false on failure
@@ -307,66 +321,57 @@ public:
 		}
 		return r;
 	}
-
-	/// Run this function in a background thread to recive messages, and, if enabled, accept new connections through listener
-	/// Without this running, no new messages will be added to stack, i.e messages wont be received
-	void receiveLoop(){
-		// create a SocketSet
-		SocketSet readSet = new SocketSet();
-
-		TimeVal timeout;
-		timeout.seconds = 5;// after every 5 sec, check if loop needs to terminate
-
+	///Waits for an event to occur, and returns it. A timeout can be provided
+	Event getEvent(TimeVal timeout){
 		char[1024] buffer;
-
-		receiveLoopIsRunning = true;
-		while(receiveLoopIsRunning){
-			readSet.reset();
-			// add all connections, listener too, if possible
-			foreach(conn; connections){
-				if (conn !is null){
-					readSet.add(conn);
-				}
+		Event result;
+		SocketSet readSet;
+		//add all active connections
+		foreach(conn; connections){
+			if (conn !is null){
+				readSet.add(conn);
 			}
-			//listener
-			if (listener !is null){
-				readSet.add(listener);
+		}
+		//add the listener if not null
+		if (listener !is null){
+			readSet.add(listener);
+		}
+		// check if a message was received
+		if (Socket.select(readSet, null, null, &timeout) > 0){
+			// check if a new connection needs to be accepted
+			if (readSet.isSet(listener)){
+				// add new connection
+				Socket client = listener.accept();
+				client.setOption(SocketOptionLevel.TCP, SocketOption.KEEPALIVE, 1);
+				uinteger conID = addSocket(client);
+
+				result = Event(conID, Event.Type.ConnectionAccepted);
 			}
 			// check if a message was received
-			if (Socket.select(readSet, null, null, &timeout) > 0){
-				// check if a new connection needs to be accepted
-				if (readSet.isSet(listener)){
-					// add new connection
-					Socket client = listener.accept();
-					client.setOption(SocketOptionLevel.TCP, SocketOption.KEEPALIVE, 1);
-					connections ~= client;
-				}
-				// check if a message was received
-				for (uinteger conID = 0; conID < connections.length; conID ++){
-					//did this connection sent it?
-					if (readSet.isSet(connections[conID])){
-						uinteger msgLen = connections[conID].receive(buffer);
-						// check if connection was closed
-						if (msgLen == 0){
-							// connection closed, remove from array, and clear any partially-received message from this connection
-							connections[conID].destroy();
-							connections[conID] = null;
-							// remove messages
-							if (conID in incomingMessages){
-								incomingMessages.remove(conID);
-							}
-						}else{
-							// a message was received
-							addreceivedMessage(buffer[0 .. msgLen], conID);
+			for (uinteger conID = 0; conID < connections.length; conID ++){
+				//did this connection sent it?
+				if (readSet.isSet(connections[conID])){
+					uinteger msgLen = connections[conID].receive(buffer);
+					// check if connection was closed
+					if (msgLen == 0){
+						// connection closed, remove from array, and clear any partially-received message from this connection
+						connections[conID].destroy();
+						connections[conID] = null;
+						// remove messages
+						if (conID in incomingMessages){
+							incomingMessages.remove(conID);
 						}
+
+						result = Event(conID, Event.Type.ConnectionClosed);
+					}else{
+						// a message was received
+						result = addreceivedMessage(buffer[0 .. msgLen], conID);
 					}
 				}
 			}
 		}
-
+		return result;
 	}
-	///Waits for an event to occur, and returns it. A timeout can be provided
-	/// TODO
 
 	///Returns IP Address of a connection using connection ID
 	///`local` if true, makes it return the local address, otherwise, remoteAddress is used
