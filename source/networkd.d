@@ -17,16 +17,6 @@ private struct ReceivedMessage{
 	uinteger senderConID; /// Connection ID of the sender
 }
 
-/// MessageEvent, returned by `Event.get!(Event.Type.MessageReceived)`
-struct MessageEvent{
-	char[] message; /// The message that was received
-}
-/// PartMessageEvent, returned by `Event.get!(Event.Type.PartMessageReceived)`
-struct PartMessageEvent{
-	char[] message; /// The message that has been received
-	uint size; /// The length of message when transfer will be complete
-}
-
 
 ///Event: this type can contain other event types, such as message-received etc.
 ///It's returned by `Node.getEvent`
@@ -38,13 +28,18 @@ struct Event{
 		ConnectionAccepted, /// When the listener accepts an incoming connection. The connection ID of this connection can be retrieved by `Event.conID`
 		ConnectionClosed, /// When a connection is closed
 	}
+	/// PartMessageEvent, returned by `Event.get!(Event.Type.PartMessageEvent)`
+	struct PartMessageEvent{
+		uint received; /// The number of bytes that have been received
+		uint size; /// The length of message when transfer will be complete
+	}
 	/// Stores Type for this Event
 	private Type type;
 	/// Stores Connection ID of the sender
 	private uinteger senderConID;
 	/// an Event can be only of a single type, so we use union to store that Type
 	private union{
-		MessageEvent messageEvent;
+		char[] messageEvent;
 		PartMessageEvent partMessageEvent;
 	}
 
@@ -56,38 +51,42 @@ struct Event{
 	@property uinteger conID(){
 		return senderConID;
 	}
-	/// Returns the event using the Event.Type  
+	/// Returns more data on the event, for each Event Type, the returned data type(s) is different
 	/// Call it like:
 	/// ```
 	/// Event.getEvent!(Event.Type.SOMETYPE);
 	/// ```
-	@property getEvent(Type T)(){
+	/// 
+	/// For `Event.Type.MessageEvent`, the message received is returned as `char[]`
+	/// For `Event.Type.partMessageEvent`, `partMessageEvent` is returned which contains `received` bytes, and `size`
+	/// For `Event.Type.ConnectionAccepted` and `...ConnectionClosed`, no data is returned, exception will be thrown instead.
+	@property getEventData(Type T)(){
 		// make sure that the type is correct
 		//since it's a template, and Type T will be known at compile time, we'll use static
 		static if (T != type){
 			throw new Exception("Provided Event Type differs from actual Event Type");
 		}
 		// now a static if for every type...
-		static if (T == Type.MessageReceived){
-			return messageReceived;
+		static if (T == Type.MessageEvent){
+			return messageEvent;
+		}else static if (T == Type.PartMessageEvent){
+			return partMessageEvent;
 		}else static if (T == Type.ConnectionAccepted){
-			return connectionAccepted;
+			throw new Exception("No further data can be retrieved from Event.Type.ConnectionAccepted using Event.getEvent");
 		}else static if (T == Type.ConnectionClosed){
-			return connectionClosed;
-		}else static if (T == Type.PartMessageReceived){
-			return partMessageReceived;
+			throw new Exception("No further data can be retrieved from Event.Type.ConnectionClosed using Event.getEvent");
 		}
 	}
 	//constructors, different for each Event Type
 	// we'll mark them private as all Events are constructed in this module
 	private{
-		this(uinteger conID, MessageEvent event){
-			messageEvent = event;
+		this(uinteger conID, char[] eventData){
+			messageEvent = eventData;
 			type = Type.MessageEvent;
 			senderConID = conID;
 		}
-		this(uinteger conID, PartMessageEvent event){
-			partMessageEvent = event;
+		this(uinteger conID, PartMessageEvent eventData){
+			partMessageEvent = eventData;
 			type = Type.PartMessageEvent;
 			senderConID = conID;
 		}
