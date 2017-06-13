@@ -343,7 +343,7 @@ public:
 		// check if a message was received
 		if (Socket.select(receiveSockets, null, null, timeout) > 0){
 			// check if a new connection needs to be accepted
-			if (receiveSockets.isSet(listener)){
+			if (listener !is null && receiveSockets.isSet(listener)){
 				// add new connection
 				Socket client = listener.accept();
 				client.setOption(SocketOptionLevel.TCP, SocketOption.KEEPALIVE, 1);
