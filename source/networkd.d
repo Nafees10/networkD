@@ -12,7 +12,7 @@ private struct IncomingMessage{
 }
 
 
-/// Srores data about the event returned by `Node.getEvent`
+/// Stores data about the event returned by `Node.getEvent`
 struct Event{
 	/// Enum defining all possible event types
 	enum Type{
@@ -20,6 +20,7 @@ struct Event{
 		PartMessageEvent, /// When a part of a message is received. This can be used to estimate the time-left...
 		ConnectionAccepted, /// When the listener accepts an incoming connection. The connection ID of this connection can be retrieved by `Event.conID`
 		ConnectionClosed, /// When a connection is closed
+		Timeout, /// Nothing happened, `Node.getEvent` exited because of timeout
 	}
 	/// PartMessageEvent, returned by `Event.getEventData!(Event.Type.PartMessageEvent)`
 	/// Stores information about transmission of a message, which isn't completely received yet.
@@ -322,6 +323,7 @@ public:
 	///1. data received
 	///2. connection accepted by listener
 	///3. connection closed
+	///4. timeout while waiting for the above to occur
 	///
 	///Messages are not received till this function is called
 	Event getEvent(TimeVal* timeout = null){
@@ -371,6 +373,9 @@ public:
 					}
 				}
 			}
+		}else{
+			// timeout happened
+			result = Event(0, Event.Type.Timeout);
 		}
 		return result;
 	}
