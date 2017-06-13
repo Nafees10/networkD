@@ -5,21 +5,14 @@ import utils.misc;
 import utils.baseconv;//needed for converting message size to array of char
 import utils.lists;
 
-/// Used by `Node` to store incoming message's contents and size
+/// Used by `Node` to store messages that aren't completely received, temporarily
 private struct IncomingMessage{
 	char[] buffer; /// The received message
 	uint size = 0; /// The size of the message, we use uint instead of uinteger because the size can not be more than 2^32 bytes
 }
 
-/// Used by `Node` to store message that has been received, and is still in the stack, yet to be read
-private struct ReceivedMessage{
-	char[] message; /// The received message, size can be determined by array's length
-	uinteger senderConID; /// Connection ID of the sender
-}
 
-
-///Event: this type can contain other event types, such as message-received etc.
-///It's returned by `Node.getEvent`
+/// Srores data about the event returned by `Node.getEvent`
 struct Event{
 	/// Enum defining all possible event types
 	enum Type{
@@ -29,17 +22,15 @@ struct Event{
 		ConnectionClosed, /// When a connection is closed
 	}
 	/// PartMessageEvent, returned by `Event.getEventData!(Event.Type.PartMessageEvent)`
+	/// Stores information about transmission of a message, which isn't completely received yet.
 	/// 
 	/// The values provided can be (will be) incorrect if less than 4 bytes have been received
 	struct PartMessageEvent{
 		uint received; /// The number of bytes that have been received
 		uint size; /// The length of message when transfer will be complete
 	}
-	/// Stores Type for this Event
 	private Type type;
-	/// Stores Connection ID of the sender
 	private uinteger senderConID;
-	/// an Event can be only of a single type, so we use union to store that Type
 	private union{
 		char[] messageEvent;
 		PartMessageEvent partMessageEvent;
@@ -56,7 +47,7 @@ struct Event{
 	/// Returns more data on the event, for each Event Type, the returned data type(s) is different
 	/// Call it like:
 	/// ```
-	/// Event.getEvent!(Event.Type.SOMETYPE);
+	/// Event.getEventData!(Event.Type.SOMETYPE);
 	/// ```
 	/// 
 	/// For `Event.Type.MessageEvent`, the message received is returned as `char[]`
@@ -106,7 +97,7 @@ private:
 	Socket[] connections;/// List of all connected Sockets
 	bool isAcceptingConnections = false;/// Determines whether any new incoming connection will be accepted or not
 
-	bool receiveLoopIsRunning;// used to terminate receiveLoop by setting it's val to false
+
 	
 	IncomingMessage[uinteger] incomingMessages;/// messages that are not completely received yet, i.e only a part has been received, are stored here
 
@@ -268,7 +259,7 @@ public:
 		}
 	}
 
-	///Returns true if a connection ID is assigned to an existing connection
+	/// Returns true if a connection ID is assigned to an existing connection
 	bool connectionExists(uinteger conID){
 		bool r = false;
 		if (conID < connections.length && connections[conID] !is null){
@@ -277,7 +268,7 @@ public:
 		return r;
 	}
 	/// Sends a message to a Node using connection ID
-	/// The message on the other end must be received using `networkd.Node` because before sending, the message is not sent raw.
+	/// The message on the other end must be received using `networkd.Node.getEvent` because before sending, the message is not sent raw.
 	/// The first 4 bytes (32 bits) contain the size of the message, including these 4 bytes
 	/// This is followed by the content of the message. If the content is too large, it is split up into several packets.
 	/// The max message size is 4 bytes less than 4 gigabytes (4294967292 bytes)
@@ -325,8 +316,15 @@ public:
 		}
 		return r;
 	}
-	///Waits for an event to occur, and returns it. A timeout can be provided
-	Event getEvent(TimeVal* timeout){
+	///Waits for an event to occur, and returns it. A timeout can be provided, if null, max value is used
+	///
+	///An event is either of these:
+	///1. data received
+	///2. connection accepted by listener
+	///3. connection closed
+	///
+	///Messages are not received till this function is called
+	Event getEvent(TimeVal* timeout = null){
 		char[1024] buffer;
 		Event result;
 		receiveSockets.reset;
@@ -343,7 +341,7 @@ public:
 		// check if a message was received
 		if (Socket.select(receiveSockets, null, null, timeout) > 0){
 			// check if a new connection needs to be accepted
-			if (listener !is null && receiveSockets.isSet(listener)){
+			if (isAcceptingConnections && listener !is null && receiveSockets.isSet(listener)){
 				// add new connection
 				Socket client = listener.accept();
 				client.setOption(SocketOptionLevel.TCP, SocketOption.KEEPALIVE, 1);
@@ -424,5 +422,15 @@ public:
 		uinteger[] r = list.toArray;
 		list.destroy;
 		return r;
+	}
+	/// Specifies if incoming connections will be accepted by listener.
+	/// It's value does not have any affect if `litenForConnections` was specified as `false` in constructor
+	@property bool acceptConnections(){
+		return isAcceptingConnections;
+	}
+	/// Specifies if incoming connections will be accepted by listener.
+	/// It's value does not have any affect if `litenForConnections` was specified as `false` in constructor
+	@property bool acceptConnections(bool newVal){
+		return isAcceptingConnections = newVal;
 	}
 }
