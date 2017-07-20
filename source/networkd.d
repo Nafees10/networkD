@@ -54,7 +54,7 @@ struct Event{
 	/// For `Event.Type.MessageEvent`, the message received is returned as `char[]`
 	/// For `Event.Type.partMessageEvent`, `partMessageEvent` is returned which contains `received` bytes, and `size`
 	/// For `Event.Type.ConnectionAccepted` and `...ConnectionClosed`, no data is returned, exception will be thrown instead.
-	@property getEventData(Type T)(){
+	@property auto getEventData(Type T)(){
 		// make sure that the type is correct
 		//since it's a template, and Type T will be known at compile time, we'll use static
 		if (T != type){
