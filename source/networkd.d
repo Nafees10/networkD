@@ -198,6 +198,7 @@ public:
 			listener.setOption(SocketOptionLevel.SOCKET, SocketOption.REUSEADDR, true);
 			listener.bind(listenerAddr);
 			listener.listen(15);
+			isAcceptingConnections = true;
 		}else{
 			listenerAddr = null;
 			listener = null;
