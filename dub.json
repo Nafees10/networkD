@@ -6,6 +6,25 @@
 	"dependencies": {
 		"utils": "~>0.1.3"
 	},
+	"configurations": [
+		{
+			"name": "default",
+			"targetType": "library",
+			"targetName": "networkd"
+		},
+		{
+			"name": "server-demo",
+			"targetType": "executable",
+			"targetName": "server",
+			"versions": ["serverdemo"]
+		},
+		{
+			"name": "client-demo",
+			"targetType": "executable",
+			"targetName": "client",
+			"versions": ["clientdemo"]
+		}
+	],
 	"description": "A simple networking library based.socket",
 	"copyright": "Copyright © 2017, Nafees",
 	"license": "MIT"
