@@ -440,3 +440,22 @@ public:
 		return isAcceptingConnections = newVal;
 	}
 }
+
+
+
+/// runs a loop waiting for events to occur, and calling a event-handler, while `isRunning == true`
+/// 
+/// `node` is the Node to run the loop for
+/// `eventHandler` is the function to call when an event occurs (except for Timeout)
+/// `isRunning` is the variable that specifies if the loop is still running, it can be terminated using `isRunning=false`
+void runNetLoop(Node node, void function(NetEvent) eventHandler, ref shared(bool) isRunning){
+	TimeVal timeout;
+	timeout.seconds = 2;
+	while(isRunning){
+		NetEvent event = node.getEvent(&timeout);
+		if (event.type == NetEvent.Type.Timeout){
+			continue;
+		}
+		eventHandler(event);
+	}
+}
