@@ -13,14 +13,14 @@ version(serverdemo){
 	void main(){
 		Node server = new Node(true, 2525);
 		while (true){
-			Event event = server.getEvent();
-			if (event.eventType == Event.Type.MessageEvent){
+			NetEvent event = server.getEvent();
+			if (event.eventType == NetEvent.Type.MessageEvent){
 				uint senderID = cast(uint)event.conID;
-				char[] message = event.getEventData!(Event.Type.MessageEvent);
+				char[] message = event.getEventData!(NetEvent.Type.MessageEvent);
 				writeln("Message received from ID#",senderID,':');
 				writeln(message);
 				server.sendMessage(senderID, cast(char[])"Server: "~message);
-			}else if (event.eventType == Event.Type.ConnectionAccepted){
+			}else if (event.eventType == NetEvent.Type.ConnectionAccepted){
 				writeln("New connection accepted. ConnectionID:",event.conID);
 			}
 		}

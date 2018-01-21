@@ -12,17 +12,17 @@ private struct IncomingMessage{
 }
 
 
-/// Stores data about the event returned by `Node.getEvent`
-struct Event{
-	/// Enum defining all possible event types
+/// Stores data about the NetEvent returned by `Node.getEvent`
+struct NetEvent{
+	/// Enum defining all possible NetEvent types
 	enum Type{
 		MessageEvent, /// When a message has been completely transfered (received)
 		PartMessageEvent, /// When a part of a message is received. This can be used to estimate the time-left...
-		ConnectionAccepted, /// When the listener accepts an incoming connection. The connection ID of this connection can be retrieved by `Event.conID`
+		ConnectionAccepted, /// When the listener accepts an incoming connection. The connection ID of this connection can be retrieved by `NetEvent.conID`
 		ConnectionClosed, /// When a connection is closed
 		Timeout, /// Nothing happened, `Node.getEvent` exited because of timeout
 	}
-	/// PartMessageEvent, returned by `Event.getEventData!(Event.Type.PartMessageEvent)`
+	/// PartMessageEvent, returned by `NetEvent.getEventData!(NetEvent.Type.PartMessageEvent)`
 	/// Stores information about transmission of a message, which isn't completely received yet.
 	/// 
 	/// The values provided can be (will be) incorrect if less than 4 bytes have been received
@@ -37,28 +37,28 @@ struct Event{
 		PartMessageEvent partMessageEvent;
 	}
 
-	/// Returns the Type for this event
+	/// Returns the Type for this Event
 	@property Type eventType(){
 		return type;
 	}
-	/// Returns the connection ID associated with the event
+	/// Returns the connection ID associated with the NetEvent
 	@property uinteger conID(){
 		return senderConID;
 	}
-	/// Returns more data on the event, for each Event Type, the returned data type(s) is different
+	/// Returns more data on the NetEvent, for each NetEvent Type, the returned data type(s) is different
 	/// Call it like:
 	/// ```
-	/// Event.getEventData!(Event.Type.SOMETYPE);
+	/// NetEvent.getEventData!(NetEvent.Type.SOMETYPE);
 	/// ```
 	/// 
-	/// For `Event.Type.MessageEvent`, the message received is returned as `char[]`
-	/// For `Event.Type.partMessageEvent`, `partMessageEvent` is returned which contains `received` bytes, and `size`
-	/// For `Event.Type.ConnectionAccepted` and `...ConnectionClosed`, no data is returned, exception will be thrown instead.
+	/// For `NetEvent.Type.MessageEvent`, the message received is returned as `char[]`
+	/// For `NetEvent.Type.partMessageEvent`, `partMessageEvent` is returned which contains `received` bytes, and `size`
+	/// For `NetEvent.Type.ConnectionAccepted` and `...ConnectionClosed`, no data is returned, exception will be thrown instead.
 	@property auto getEventData(Type T)(){
 		// make sure that the type is correct
 		//since it's a template, and Type T will be known at compile time, we'll use static
 		if (T != type){
-			throw new Exception("Provided Event Type differs from actual Event Type");
+			throw new Exception("Provided NetEvent Type differs from actual NetEvent Type");
 		}
 		// now a static if for every type...
 		static if (T == Type.MessageEvent){
@@ -66,13 +66,13 @@ struct Event{
 		}else static if (T == Type.PartMessageEvent){
 			return partMessageEvent;
 		}else static if (T == Type.ConnectionAccepted){
-			throw new Exception("No further data can be retrieved from Event.Type.ConnectionAccepted using Event.getEventData");
+			throw new Exception("No further data can be retrieved from NetEvent.Type.ConnectionAccepted using NetEvent.getEventData");
 		}else static if (T == Type.ConnectionClosed){
-			throw new Exception("No further data can be retrieved from Event.Type.ConnectionClosed using Event.getEventData");
+			throw new Exception("No further data can be retrieved from NetEvent.Type.ConnectionClosed using NetEvent.getEventData");
 		}
 	}
-	//constructors, different for each Event Type
-	// we'll mark them private as all Events are constructed in this module
+	//constructors, different for each NetEvent Type
+	// we'll mark them private as all NetEvents are constructed in this module
 	private{
 		this(uinteger conID, char[] eventData){
 			messageEvent = eventData.dup;
@@ -106,7 +106,7 @@ private:
 
 	///Called by `Node.getEvent` when a new message is received, with `buffer` containing the message, and `conID` as the 
 	///connection ID
-	Event addReceivedMessage(char[] buffer, uinteger conID){
+	NetEvent addReceivedMessage(char[] buffer, uinteger conID){
 		// check if the firt part of the message was already received
 		if (conID in incomingMessages){
 			// append this packet's content to previously received message(s)
@@ -131,8 +131,8 @@ private:
 			// add it to `incomingMessages`
 			incomingMessages[conID] = msg;
 		}
-		Event result;
-		// check if transfer is complete, case yes, add an event for it as complete message, else; as part message
+		NetEvent result;
+		// check if transfer is complete, case yes, add an NetEvent for it as complete message, else; as part message
 		if (incomingMessages[conID].size > 0 && incomingMessages[conID].buffer.length >= incomingMessages[conID].size){
 			// check if extra bytes were sent, consider those bytes as a separate message
 			char[] otherMessage = null;
@@ -143,7 +143,7 @@ private:
 				incomingMessages[conID].buffer.length = incomingMessages[conID].size;
 			}
 			// transfer complete, move it to `receivedMessages`
-			result = Event(conID, incomingMessages[conID].buffer[4 .. incomingMessages[conID].size]);
+			result = NetEvent(conID, incomingMessages[conID].buffer[4 .. incomingMessages[conID].size]);
 			// remove it from `incomingMessages`
 			incomingMessages.remove(conID);
 
@@ -152,15 +152,15 @@ private:
 				addReceivedMessage(otherMessage, conID);
 			}
 		}else{
-			//add event for part message
-			Event.PartMessageEvent partMessage;
+			//add NetEvent for part message
+			NetEvent.PartMessageEvent partMessage;
 			if (incomingMessages[conID].buffer.length > 4){
 				partMessage.received = cast(uint)incomingMessages[conID].buffer.length - 4;
 			}else{
 				partMessage.received = 0;
 			}
 			partMessage.size = incomingMessages[conID].size - 4;
-			result = Event(conID, partMessage);
+			result = NetEvent(conID, partMessage);
 		}
 		return result;
 	}
@@ -318,18 +318,18 @@ public:
 		}
 		return r;
 	}
-	///Waits for an event to occur, and returns it. A timeout can be provided, if null, max value is used
+	///Waits for an NetEvent to occur, and returns it. A timeout can be provided, if null, max value is used
 	///
-	///An event is either of these:
+	///An NetEvent is either of these:
 	///1. data received
 	///2. connection accepted by listener
 	///3. connection closed
 	///4. timeout while waiting for the above to occur
 	///
 	///Messages are not received till this function is called
-	Event getEvent(TimeVal* timeout = null){
+	NetEvent getEvent(TimeVal* timeout = null){
 		char[1024] buffer;
-		Event result;
+		NetEvent result;
 		receiveSockets.reset;
 		//add all active connections
 		foreach(conn; connections){
@@ -350,7 +350,7 @@ public:
 				client.setOption(SocketOptionLevel.TCP, SocketOption.KEEPALIVE, 1);
 				uinteger conID = addSocket(client);
 
-				result = Event(conID, Event.Type.ConnectionAccepted);
+				result = NetEvent(conID, NetEvent.Type.ConnectionAccepted);
 			}
 			// check if a message was received
 			for (uinteger conID = 0; conID < connections.length; conID ++){
@@ -367,7 +367,7 @@ public:
 							incomingMessages.remove(conID);
 						}
 
-						result = Event(conID, Event.Type.ConnectionClosed);
+						result = NetEvent(conID, NetEvent.Type.ConnectionClosed);
 					}else{
 						// a message was received
 						result = addReceivedMessage(buffer[0 .. msgLen], conID);
@@ -376,7 +376,7 @@ public:
 			}
 		}else{
 			// timeout happened
-			result = Event(0, Event.Type.Timeout);
+			result = NetEvent(0, NetEvent.Type.Timeout);
 		}
 		return result;
 	}
