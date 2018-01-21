@@ -31,9 +31,9 @@ version(clientdemo){
 			}
 			// receive
 			NetEvent event = client.getEvent();
-			if (event.eventType == NetEvent.Type.MessageEvent){
+			if (event.type == NetEvent.Type.MessageEvent){
 				writeln(event.getEventData!(NetEvent.Type.MessageEvent));
-			}else if (event.eventType == NetEvent.Type.ConnectionClosed){
+			}else if (event.type == NetEvent.Type.ConnectionClosed){
 				writeln("Server closed the connection");
 				break;
 			}

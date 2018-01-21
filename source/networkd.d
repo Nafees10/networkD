@@ -30,7 +30,7 @@ struct NetEvent{
 		uint received; /// The number of bytes that have been received
 		uint size; /// The length of message when transfer will be complete
 	}
-	private Type type;
+	private Type _type;
 	private uinteger senderConID;
 	private union{
 		char[] messageEvent;
@@ -38,8 +38,8 @@ struct NetEvent{
 	}
 
 	/// Returns the Type for this Event
-	@property Type eventType(){
-		return type;
+	@property Type type(){
+		return _type;
 	}
 	/// Returns the connection ID associated with the NetEvent
 	@property uinteger conID(){
@@ -76,16 +76,16 @@ struct NetEvent{
 	private{
 		this(uinteger conID, char[] eventData){
 			messageEvent = eventData.dup;
-			type = Type.MessageEvent;
+			_type = Type.MessageEvent;
 			senderConID = conID;
 		}
 		this(uinteger conID, PartMessageEvent eventData){
 			partMessageEvent = eventData;
-			type = Type.PartMessageEvent;
+			_type = Type.PartMessageEvent;
 			senderConID = conID;
 		}
 		this(uinteger conID, Type t){
-			type = t;
+			_type = t;
 			senderConID = conID;
 		}
 	}
