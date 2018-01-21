@@ -176,7 +176,7 @@ private:
 			}
 		}
 		// check if has to expand array
-		if (connections.length > 0 && connections[i] is null){
+		if (connections.length > 0 && i < connections.length && connections[i] is null){
 			// there's space already, no need to expand
 			connections[i] = connection;
 		}else{
