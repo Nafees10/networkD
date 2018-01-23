@@ -320,16 +320,17 @@ public:
 	}
 	///Waits for an NetEvent to occur, and returns it. A timeout can be provided, if null, max value is used
 	///
+	///Messages are not received till this function is called
+	///
 	///An NetEvent is either of these:
 	///1. data received
 	///2. connection accepted by listener
 	///3. connection closed
 	///4. timeout while waiting for the above to occur
 	///
-	///Messages are not received till this function is called
-	NetEvent getEvent(TimeVal* timeout = null){
+	///Returns: array containing events, or empty array in case of timeout or interruption
+	NetEvent[] getEvent(TimeVal* timeout = null){
 		char[1024] buffer;
-		NetEvent result;
 		receiveSockets.reset;
 		//add all active connections
 		foreach(conn; connections){
@@ -341,8 +342,14 @@ public:
 		if (listener !is null){
 			receiveSockets.add(listener);
 		}
+		// copy the timeout, coz idk why SocketSet.select resets it every time it timeouts
+		TimeVal originalTimeout = *timeout;
 		// check if a message was received
-		if (Socket.select(receiveSockets, null, null, timeout) > 0){
+		int modifiedCount = Socket.select(receiveSockets, null, null, &originalTimeout);
+		if (modifiedCount > 0){
+			NetEvent[] result;
+			result.length = cast(uinteger)modifiedCount;
+			uinteger i;// the index of result to write to, next
 			// check if a new connection needs to be accepted
 			if (isAcceptingConnections && listener !is null && receiveSockets.isSet(listener)){
 				// add new connection
@@ -350,10 +357,11 @@ public:
 				client.setOption(SocketOptionLevel.TCP, SocketOption.KEEPALIVE, 1);
 				uinteger conID = addSocket(client);
 
-				result = NetEvent(conID, NetEvent.Type.ConnectionAccepted);
+				result[i] = NetEvent(conID, NetEvent.Type.ConnectionAccepted);
+				i++;
 			}
 			// check if a message was received
-			for (uinteger conID = 0; conID < connections.length; conID ++){
+			for (uinteger conID = 0; conID < connections.length && i < result.length; conID ++){
 				//did this connection sent it?
 				if (receiveSockets.isSet(connections[conID])){
 					uinteger msgLen = connections[conID].receive(buffer);
@@ -367,18 +375,18 @@ public:
 							incomingMessages.remove(conID);
 						}
 
-						result = NetEvent(conID, NetEvent.Type.ConnectionClosed);
+						result[i] = NetEvent(conID, NetEvent.Type.ConnectionClosed);
+						i++;
 					}else{
 						// a message was received
-						result = addReceivedMessage(buffer[0 .. msgLen], conID);
+						result[i] = addReceivedMessage(buffer[0 .. msgLen], conID);
+						i++;
 					}
 				}
 			}
-		}else{
-			// timeout happened
-			result = NetEvent(0, NetEvent.Type.Timeout);
+			return result;
 		}
-		return result;
+		return [];
 	}
 
 	///Returns IP Address of a connection using connection ID
@@ -442,7 +450,6 @@ public:
 }
 
 
-
 /// runs a loop waiting for events to occur, and calling a event-handler, while `isRunning == true`
 /// 
 /// `node` is the Node to run the loop for
@@ -452,10 +459,9 @@ void runNetLoop(Node node, void function(NetEvent) eventHandler, ref shared(bool
 	TimeVal timeout;
 	timeout.seconds = 2;
 	while(isRunning){
-		NetEvent event = node.getEvent(&timeout);
-		if (event.type == NetEvent.Type.Timeout){
-			timeout.seconds = 2;
+		NetEvent[] events = node.getEvent(&timeout);
+		foreach (event; events){
+			eventHandler(event);
 		}
-		eventHandler(event);
 	}
 }

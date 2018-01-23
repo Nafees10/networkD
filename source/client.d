@@ -17,7 +17,8 @@ version(clientdemo){
 		// connect with server
 		serverConnectionID = cast(uint)client.newConnection("localhost", 2525);
 		// start sending each line, and write received message back
-		while (true){
+		bool isRunning = true;
+		while (isRunning){
 			string line = readln;
 			// remove trailing \n:
 			line.length --;
@@ -30,12 +31,15 @@ version(clientdemo){
 				break;
 			}
 			// receive
-			NetEvent event = client.getEvent();
-			if (event.type == NetEvent.Type.MessageEvent){
-				writeln(event.getEventData!(NetEvent.Type.MessageEvent));
-			}else if (event.type == NetEvent.Type.ConnectionClosed){
-				writeln("Server closed the connection");
-				break;
+			NetEvent[] events = client.getEvent();
+			foreach (event; events){
+				if (event.type == NetEvent.Type.MessageEvent){
+					writeln(event.getEventData!(NetEvent.Type.MessageEvent));
+				}else if (event.type == NetEvent.Type.ConnectionClosed){
+					writeln("Server closed the connection");
+					isRunning = false;
+					break;
+				}
 			}
 		}
 	}
