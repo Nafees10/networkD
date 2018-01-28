@@ -443,18 +443,19 @@ public:
 			receiveSockets.add(listener);
 		}
 		// copy the timeout, coz idk why SocketSet.select resets it every time it timeouts
-		TimeVal originalTimeout;
+		TimeVal* originalTimeout;
+		TimeVal tempTimeVal;
 		if (timeout is null){
-			originalTimeout.seconds = 0;
+			originalTimeout = null;
 		}else{
-			originalTimeout = *timeout;
+			tempTimeVal = *timeout;
+			originalTimeout = &tempTimeVal;
 		}
 		// check if a message was received
-		int modifiedCount = Socket.select(receiveSockets, null, null, &originalTimeout);
+		int modifiedCount = Socket.select(receiveSockets, null, null, originalTimeout);
 		if (modifiedCount > 0){
 			char[1024] buffer;
 			NetEvent[] result = [];
-			uinteger i;// counts the number of events processed
 			// check if a new connection needs to be accepted
 			if (isAcceptingConnections && listener !is null && receiveSockets.isSet(listener)){
 				// add new connection
@@ -463,10 +464,9 @@ public:
 				uinteger conID = addSocket(client);
 
 				result ~= NetEvent(conID, NetEvent.Type.ConnectionAccepted);
-				i++;
 			}
 			// check if a message was received
-			for (uinteger conID = 0; conID < connections.length && i < modifiedCount; conID ++){
+			for (uinteger conID = 0; conID < connections.length; conID ++){
 				//did this connection sent it?
 				if (receiveSockets.isSet(connections[conID])){
 					uinteger msgLen = connections[conID].receive(buffer);
@@ -485,16 +485,15 @@ public:
 						}
 
 						result ~= NetEvent(conID, NetEvent.Type.ConnectionClosed);
-						i++;
 					}else{
 						// a message was received
 						result ~= addReceivedMessage(buffer[0 .. msgLen], conID);
-						i++;
 					}
 				}
 			}
 			return result;
 		}
+		.destroy(receiveSockets);
 		return [];
 	}
 
