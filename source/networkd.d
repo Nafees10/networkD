@@ -414,7 +414,7 @@ public:
 			char[] msgSize = getSizeInChars(message.length + 4);//+4 for the size-chars
 			/// only continue if size can fit in 4 bytes
 			if (msgSize.length == 4){
-				sendPacket(connections[conID],msgSize~message);
+				r = sendPacket(connections[conID],msgSize~message);
 			}
 		}
 		return r;
