@@ -13,14 +13,14 @@ version(clientdemo){
 	void main(){
 		Node client = new Node();
 		// generate keys, we want it encrypted
-		write("generating keys, takes time... ");
-		client.generateKeys(2048);
+		writeln("generating keys, takes time... ");
+		client.generateKeys(1024);
 		writeln("done");
 		// stores the ID of the connection with server
 		uint serverConnectionID;
 		// connect with server
 		serverConnectionID = cast(uint)client.newConnection("localhost", 2525);
-		write("sending key... ");
+		writeln("sending key... ");
 		if (client.sendKey(serverConnectionID)){
 			writeln("done");
 		}else{
@@ -44,7 +44,10 @@ version(clientdemo){
 			NetEvent[] events = client.getEvent();
 			foreach (event; events){
 				if (event.type == NetEvent.Type.MessageEvent){
-					writeln(event.getEventData!(NetEvent.Type.MessageEvent));
+					if (event.encrypted){
+						write("(encrypted) ");
+					}
+					writeln("server: ",event.getEventData!(NetEvent.Type.MessageEvent));
 				}else if (event.type == NetEvent.Type.ConnectionClosed){
 					writeln("Server closed the connection");
 					isRunning = false;
@@ -52,5 +55,6 @@ version(clientdemo){
 				}
 			}
 		}
+		.destroy(client);
 	}
 }

@@ -13,10 +13,11 @@ version(serverdemo){
 	void main(){
 		Node server = new Node(true, 2525);
 		// generate keys, we want it encrypted
-		write("generating keys, takes time... ");
-		server.generateKeys(2048);
+		writeln("generating keys, takes time... ");
+		server.generateKeys(1024);
 		writeln("done");
-		while (true){
+		bool isRunning = true;
+		while (isRunning){
 			NetEvent[] events = server.getEvent();
 			foreach (event; events){
 				if (event.type == NetEvent.Type.MessageEvent){
@@ -31,7 +32,7 @@ version(serverdemo){
 					server.sendMessage(senderID, cast(char[])"Server: "~message);
 				}else if (event.type == NetEvent.Type.ConnectionAccepted){
 					writeln("New connection accepted. ConnectionID:",event.conID);
-					write("sending key... ");
+					writeln("sending key... ");
 					if (server.sendKey(event.conID)){
 						writeln("done");
 					}else{
@@ -40,5 +41,6 @@ version(serverdemo){
 				}
 			}
 		}
+		.destroy(server);
 	}
 }
