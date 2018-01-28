@@ -444,7 +444,12 @@ public:
 			receiveSockets.add(listener);
 		}
 		// copy the timeout, coz idk why SocketSet.select resets it every time it timeouts
-		TimeVal originalTimeout = *timeout;
+		TimeVal originalTimeout;
+		if (timeout is null){
+			originalTimeout.seconds = 0;
+		}else{
+			originalTimeout = *timeout;
+		}
 		// check if a message was received
 		int modifiedCount = Socket.select(receiveSockets, null, null, &originalTimeout);
 		if (modifiedCount > 0){
