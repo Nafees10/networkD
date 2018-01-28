@@ -5,9 +5,10 @@ A simple and basic networking library based on `std.socket` for D Language
 
 All it does/adds is:
 1. event-based networking
+2. RSA encryption
 2. Managing connections - assigns each connection/socket an "ID".
 3. Listening for new connections on a specific port
-4. Send/receive messages with a max-size limit of `4294967292 bytes` (4 bytes less than 4 gigabytes)  
+4. Send/receive messages with a max-size limit of `4294967291 bytes` (5 bytes less than 4 gigabytes)  
   
 ---
 
