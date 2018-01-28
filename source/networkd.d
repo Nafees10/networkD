@@ -170,8 +170,8 @@ private:
 			char[] message = incomingMessages[conID].buffer[4 .. incomingMessages[conID].size];
 			// check message type
 			if (cast(MessageType)message[0] == MessageType.EncryptedMessage){
-				message = cast(char[])RSA.decrypt(publicKeys[conID], cast(ubyte[])message[1 .. message.length]);
-				result ~= NetEvent(conID, message[1 .. message.length].dup, true);
+				message = cast(char[])RSA.decrypt(_keys.privateKey, cast(ubyte[])message[1 .. message.length]);
+				result ~= NetEvent(conID, message.dup, true);
 			}else if (cast(MessageType)message[0] == MessageType.PublicKey){
 				// store this
 				publicKeys[conID] = cast(string)message[1 .. message.length].dup;
@@ -431,7 +431,6 @@ public:
 	///
 	///Returns: array containing events, or empty array in case of timeout or interruption
 	NetEvent[] getEvent(TimeVal* timeout = null){
-		char[1024] buffer;
 		SocketSet receiveSockets = new SocketSet;
 		//add all active connections
 		foreach(conn; connections){
@@ -453,6 +452,7 @@ public:
 		// check if a message was received
 		int modifiedCount = Socket.select(receiveSockets, null, null, &originalTimeout);
 		if (modifiedCount > 0){
+			char[1024] buffer;
 			NetEvent[] result = [];
 			uinteger i;// counts the number of events processed
 			// check if a new connection needs to be accepted
