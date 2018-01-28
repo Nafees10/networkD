@@ -574,9 +574,7 @@ public:
 /// `node` is the Node to run the loop for
 /// `eventHandler` is the function to call when any event occurs
 /// `isRunning` is the variable that specifies if the loop is still running, it can be terminated using `isRunning=false`
-void runNetLoop(Node node, void function(NetEvent) eventHandler, ref shared(bool) isRunning){
-	TimeVal timeout;
-	timeout.seconds = 2;
+void runNetLoop(Node node, void function(NetEvent) eventHandler, ref shared(bool) isRunning, TimeVal timeout){
 	while(isRunning){
 		NetEvent[] events = node.getEvent(&timeout);
 		foreach (event; events){
