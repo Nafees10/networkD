@@ -12,10 +12,20 @@ version(clientdemo){
 	
 	void main(){
 		Node client = new Node();
+		// generate keys, we want it encrypted
+		write("generating keys, takes time... ");
+		client.generateKeys(2048);
+		writeln("done");
 		// stores the ID of the connection with server
 		uint serverConnectionID;
 		// connect with server
 		serverConnectionID = cast(uint)client.newConnection("localhost", 2525);
+		write("sending key... ");
+		if (client.sendKey(serverConnectionID)){
+			writeln("done");
+		}else{
+			writeln("failed");
+		}
 		// start sending each line, and write received message back
 		bool isRunning = true;
 		while (isRunning){
