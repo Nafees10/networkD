@@ -406,8 +406,8 @@ public:
 		//check if connection ID is valid
 		if (connectionExists(conID)){
 			// encrypt the message if possible
+			message = message.dup;
 			if (conID in publicKeys){
-				message = message.dup;
 				message = cast(char[])RSA.encrypt(publicKeys[conID], cast(ubyte[])message);
 				message = MessageType.EncryptedMessage~message;
 			}else{
