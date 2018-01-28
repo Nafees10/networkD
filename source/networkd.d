@@ -443,19 +443,21 @@ public:
 			receiveSockets.add(listener);
 		}
 		// copy the timeout, coz idk why SocketSet.select resets it every time it timeouts
-		TimeVal* originalTimeout;
+		TimeVal* usedTimeout;
 		TimeVal tempTimeVal;
 		if (timeout is null){
-			originalTimeout = null;
+			usedTimeout = null;
 		}else{
 			tempTimeVal = *timeout;
-			originalTimeout = &tempTimeVal;
+			usedTimeout = &tempTimeVal;
 		}
 		// check if a message was received
-		int modifiedCount = Socket.select(receiveSockets, null, null, originalTimeout);
-		if (modifiedCount > 0){
+		int eventCount = Socket.select(receiveSockets, null, null, usedTimeout);
+		if (eventCount > 0){
 			char[1024] buffer;
 			NetEvent[] result = [];
+			/// counts events processed
+			uint i = 0;
 			// check if a new connection needs to be accepted
 			if (isAcceptingConnections && listener !is null && receiveSockets.isSet(listener)){
 				// add new connection
@@ -464,17 +466,26 @@ public:
 				uinteger conID = addSocket(client);
 
 				result ~= NetEvent(conID, NetEvent.Type.ConnectionAccepted);
+				i++;
 			}
 			// check if a message was received
-			for (uinteger conID = 0; conID < connections.length; conID ++){
+			foreach(conID; 0 .. connections.length){
+				if (i >= eventCount){
+					break;
+				}
 				//did this connection sent it?
 				if (receiveSockets.isSet(connections[conID])){
+					i ++;
 					uinteger msgLen = connections[conID].receive(buffer);
 					// check if connection was closed
-					if (msgLen == 0){
-						// connection closed, remove from array, and clear any partially-received message from this connection
-						connections[conID].destroy();
-						connections[conID] = null;
+					if (msgLen == 0 || msgLen == Socket.ERROR){
+						if (msgLen == Socket.ERROR){
+							closeConnection(conID);
+						}else{
+							// connection closed, remove from array, and clear any partially-received message from this connection
+							connections[conID].destroy();
+							connections[conID] = null;
+						}
 						// remove messages
 						if (conID in incomingMessages){
 							incomingMessages.remove(conID);
@@ -483,7 +494,7 @@ public:
 						if (conID in publicKeys){
 							publicKeys.remove(conID);
 						}
-
+						
 						result ~= NetEvent(conID, NetEvent.Type.ConnectionClosed);
 					}else{
 						// a message was received
