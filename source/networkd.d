@@ -310,8 +310,6 @@ public:
 	/// generates keys for encrypting messages
 	void generateKeys(uint length = 1024){
 		_keys = RSA.generateKeyPair(length);
-		/// send keys to all connections
-		sendKeysToAllConnections();
 	}
 	/// Returns: true if a connection has sent public key and messages sent to it are encrypted
 	/// 
