@@ -5,7 +5,7 @@
 	],
 	"dependencies": {
 		"utils": "~>0.1.8",
-		"cryption": "~>0.1.2"
+		"crypto": "~>0.2.0"
 	},
 	"configurations": [
 		{
