@@ -4,7 +4,7 @@ import std.socket;
 import utils.misc;
 import utils.baseconv : denaryToChar, charToDenary;//needed for converting message size to array of char
 import utils.lists;
-import cryption.rsa;// for encrypting messages
+import crypto.rsa;// for encrypting messages
 
 /// Used by `Node` to store messages that aren't completely received, temporarily
 private struct IncomingMessage{
